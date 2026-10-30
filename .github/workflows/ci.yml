@@ -270,7 +270,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create environment file
-        run: bash./scripts/init-env.sh
+        run: bash ./scripts/init-env.sh
 
       - name: Set image to deploy
         env:
