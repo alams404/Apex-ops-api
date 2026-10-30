@@ -1,42 +1,50 @@
-# Observability and alert proposal
+Observability and Monitoring
 
-## What exists today
+1. Monitoring
 
-| Signal | Implementation | Where to see it |
-| --- | --- | --- |
-| Structured logs | `pino`, one JSON object per line. Fields: `time`, `level`, `service`, `version`, `event`, `requestId`, `method`, `path`, `route`, `status`, `durationMs`, and `err` on failures | `docker compose logs -f app` |
-| Request correlation | Every request gets a `requestId` (or reuses a valid incoming `x-request-id`), returned in the response header and written to every log line for that request | `curl -i localhost:3000/health` |
-| Liveness | `GET /health` plus the Docker `HEALTHCHECK` | `docker compose ps` |
-| Readiness | `GET /ready` (checks the database, 503 when it fails) | `curl -i localhost:3000/ready` |
-| Metrics | `GET /metrics`: `http_requests_total{method,route,status}`, `http_request_duration_seconds` histogram, `db_up`, default Node.js process metrics | `curl localhost:3000/metrics` |
+The Apex Operations API uses Pino for logging and provides health checks and metrics to help monitor application performance.
 
-Useful log queries (with `jq`):
+Feature| Purpose
+Logs| Records application activities and errors.
+Request ID| Helps trace individual requests.
+"/health"| Checks application health.
+"/ready"| Checks database connectivity.
+"/metrics"| Provides application performance metrics.
 
-```bash
-docker compose logs --no-log-prefix app | jq -c 'select(.level=="error")'
-docker compose logs --no-log-prefix app | jq -c 'select(.event=="http_request" and .status>=500)'
-docker compose logs --no-log-prefix app | jq -c 'select(.requestId=="<id from the response header>")'
-```
+2. Useful Commands
 
-Note on `db_up`: the gauge is updated each time `/ready` is called. Docker's own healthcheck only calls `/health`, so in the local Compose setup `db_up` is refreshed by deploy, smoke and any monitoring probe that calls `/ready`. In a real environment the orchestrator's readiness probe, or Prometheus blackbox probing, calls `/ready` continuously.
+docker compose logs -f app
+curl localhost:3000/health
+curl localhost:3000/ready
+curl localhost:3000/metrics
+docker compose ps
 
-## Metrics and alert proposal
+3. Alerts and Monitoring
 
-Proposed stack: Prometheus scrapes `/metrics` every 15 seconds, Alertmanager routes alerts, Grafana shows dashboards. In Azure the equivalents are Azure Monitor managed Prometheus and Azure Monitor alerts.
+Prometheus and Grafana are proposed tools for monitoring and dashboards.
 
-| Alert | PromQL (proposal) | Condition | Severity | First action |
-| --- | --- | --- | --- | --- |
-| High error rate | `sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m]))` | `> 0.05` for 5 minutes | Page | Check recent deploy; roll back if it correlates |
-| High latency | `histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))` | `> 0.5` seconds for 10 minutes | Ticket, page if sustained | Check DB load and recent changes |
-| Database unreachable | `db_up` | `== 0` for 2 minutes | Page | Runbook: "Database problems" |
-| Instance down | `up{job="apex-ops-api"}` | `== 0` for 1 minute | Page | `docker compose ps`, read logs |
-| Frequent restarts | container restart count (from the platform) | more than 3 in 15 minutes | Ticket | Look for crash loop in logs |
-| No traffic (optional) | `sum(rate(http_requests_total[10m]))` | `== 0` for 30 minutes during business hours | Ticket | Check upstream routing |
+Important alerts include:
 
-Why these thresholds: 5 percent errors for 5 minutes ignores brief blips but catches real regressions quickly; p95 is more honest than the average because it shows what the slowest users see. They are starting points to tune after measuring a real baseline.
+- High application error rates.
+- Slow response times.
+- Database connection failures.
+- Application downtime.
+- Frequent container restarts.
 
-Dashboards to build first: request rate, error rate, p50/p95 latency by route, `db_up`, and the running `version`.
+4. Incident Response
 
-## Failure investigation
+When a problem occurs:
 
-A full worked example (wrong database credentials) is in [incident-report.md](incident-report.md). It is reproducible with `./scripts/demo-incident.sh`.
+1. Check application health.
+2. Review application and database logs.
+3. Identify the cause.
+4. Fix the issue or roll back the deployment.
+5. Confirm the application is working.
+
+See "docs/incident-report.md" for a failure investigation example.
+
+5. Future Improvements
+
+Prometheus, Grafana and Azure Monitor can provide more advanced monitoring and alerts in a production environment.
+
+Note: These monitoring tools are proposed improvements unless actually installed and configured.

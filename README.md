@@ -1,147 +1,276 @@
-<div align="center">
-<img src="docs/imgs/logo.png" width="200">
+Apex Operations API
 
-[![GitHub Release][release-img]][release]
-[![Test][test-img]][test]
-[![Go Report Card][go-report-img]][go-report]
-[![License: Apache-2.0][license-img]][license]
-[![GitHub Downloads][github-downloads-img]][release]
-![Docker Pulls][docker-pulls]
+Project Overview
 
-[📖 Documentation][docs]
-</div>
+This project was created as part of the Junior DevOps Engineer assessment.
 
-Trivy ([pronunciation][pronunciation]) is a comprehensive and versatile security scanner.
-Trivy has *scanners* that look for security issues, and *targets* where it can find those issues.
+The goal is to build and run a simple API using Docker, automate testing with GitHub Actions, check for security issues and demonstrate a basic deployment and rollback process.
 
-Targets (what Trivy can scan):
+The project also includes monitoring, logging and documentation to make the application easier to manage.
 
-- Container Image
-- Filesystem
-- Git Repository (remote)
-- Virtual Machine Image
-- Kubernetes
+Technologies Used
 
-Scanners (what Trivy can find there):
+Technology| Purpose
+Node.js and Express| Build the API
+PostgreSQL| Store application data
+Docker| Package the application
+Docker Compose| Run the application and database
+GitHub Actions| Automate testing and builds
+Trivy| Scan for security issues
+Git and GitHub| Manage and store project code
 
-- OS packages and software dependencies in use (SBOM)
-- Known vulnerabilities (CVEs)
-- IaC issues and misconfigurations
-- Sensitive information and secrets
-- Software licenses
+Project Architecture
 
-Trivy supports most popular programming languages, operating systems, and platforms. For a complete list, see the [Scanning Coverage] page.
+The diagram below shows how the main parts of the project work together.
 
-To learn more, go to the [Trivy homepage][homepage] for feature highlights, or to the [Documentation site][docs] for detailed information.
+flowchart TD
+    A[Developer] --> B[GitHub Repository]
+    B --> C[GitHub Actions]
+    C --> D[Testing and Security Scans]
+    D --> E[Docker Image]
+    E --> F[Deployment]
+    F --> G[Node.js API]
+    G --> H[PostgreSQL Database]
 
-## Quick Start
+Architecture screenshot
 
-### Get Trivy
+"Project Architecture" (evidence/architecture.png)
 
-Trivy is available in most common distribution channels. The full list of installation options is available in the [Installation] page. Here are a few popular examples:
+Project Structure
 
-- `brew install trivy`
-- `docker run aquasec/trivy`
-- Download binary from <https://github.com/aquasecurity/trivy/releases/latest/>
-- See [Installation] for more
+The project is organised into folders to make the application and its supporting files easier to understand.
 
-Trivy is integrated with many popular platforms and applications. The complete list of integrations is available in the [Ecosystem] page. Here are a few popular examples:
+apex-operations-api/
+│
+├── app/
+│   └── Application source code
+│
+├── scripts/
+│   └── Deployment and rollback scripts
+│
+├── docs/
+│   ├── architecture.md
+│   ├── security.md
+│   ├── observability.md
+│   ├── runbook.md
+│   ├── decision-memo.md
+│   ├── incident-report.md
+│   └── ai-disclosure.md
+│
+├── evidence/
+│   └── Project screenshots
+│
+├── Dockerfile
+├── docker-compose.yml
+├── package.json
+├── .dockerignore
+├── .gitignore
+└── README.md
 
-- [GitHub Actions](https://github.com/aquasecurity/trivy-action)
-- [Kubernetes operator](https://github.com/aquasecurity/trivy-operator)
-- [VS Code plugin](https://github.com/aquasecurity/trivy-vscode-extension)
-- See [Ecosystem] for more
+Project folder screenshot
 
-### Canary builds
-There are canary builds ([Docker Hub](https://hub.docker.com/r/aquasec/trivy/tags?page=1&name=canary), [GitHub](https://github.com/aquasecurity/trivy/pkgs/container/trivy/75776514?tag=canary), [ECR](https://gallery.ecr.aws/aquasecurity/trivy#canary) images and [binaries](https://github.com/aquasecurity/trivy/actions/workflows/canary.yaml)) generated with every push to the main branch.
+"Project Structure" (evidence/project_structure.png)
 
-Please be aware: canary builds might have critical bugs, so they are not recommended for use in production.
+How to Run the Project
 
-### General usage
+Requirements
 
-```bash
-trivy <target> [--scanners <scanner1,scanner2>] <subject>
-```
+Before running the project, make sure you have:
 
-Examples:
+1. Docker installed.
+2. Docker Compose available.
+3. Git installed.
 
-```bash
-trivy image python:3.4-alpine
-```
+Step 1: Clone the Repository
 
-<details>
-<summary>Result</summary>
+git clone YOUR_GITHUB_REPOSITORY_URL
 
-https://github.com/user-attachments/assets/af1c11e7-d9c5-48af-8e05-cb34dfd6352a
+Enter the project folder:
 
-</details>
+cd apex-operations-api
 
-```bash
-trivy fs --scanners vuln,secret,misconfig myproject/
-```
+Step 2: Configure Environment Variables
 
-<details>
-<summary>Result</summary>
+Create your environment file using the example provided in the project.
 
-https://github.com/user-attachments/assets/6b3894b7-77c5-4ffc-ac94-ffe6648a30dc
+cp .env.example .env
 
-</details>
+Update the values in ".env" using your local configuration.
 
-```bash
-trivy k8s --report summary cluster
-```
+Do not upload ".env" or real passwords to GitHub.
 
-<details>
-<summary>Result</summary>
+Step 3: Build and Start the Application
 
-![k8s summary](docs/imgs/trivy-k8s.png)
+docker compose up --build -d
 
-</details>
+Step 4: Check Running Containers
 
-## FAQ
+docker compose ps
 
-### How to pronounce the name "Trivy"?
+Step 5: View Application Logs
 
-`tri` is pronounced like **tri**gger, `vy` is pronounced like en**vy**.
+docker compose logs -f
 
-## Want more? Check out Aqua
+Docker containers screenshot
 
-If you liked Trivy, you will love Aqua which builds on top of Trivy to provide even more enhanced capabilities for a complete security management offering.  
-You can find a high level comparison table specific to Trivy users [here](https://trivy.dev/docs/latest/commercial/compare/).
-In addition check out the <https://aquasec.com> website for more information about our products and services.
-If you'd like to contact Aqua or request a demo, please use this form: <https://www.aquasec.com/demo>
+"Docker Containers" (evidence/docker_containers.png)
 
-## Community
+Health Checks
 
-Trivy is an [Aqua Security][aquasec] open source project.  
-Learn about our open source work and portfolio [here][oss].  
-Contact us about any matter by opening a GitHub Discussion [here][discussions]
+The application provides health checks to help confirm whether it is running correctly.
 
-Please ensure to abide by our [Code of Conduct][code-of-conduct] during all interactions.
+The health endpoint checks the application status.
 
-[test]: https://github.com/aquasecurity/trivy/actions/workflows/test.yaml
-[test-img]: https://github.com/aquasecurity/trivy/actions/workflows/test.yaml/badge.svg
-[go-report]: https://goreportcard.com/report/github.com/aquasecurity/trivy
-[go-report-img]: https://goreportcard.com/badge/github.com/aquasecurity/trivy
-[release]: https://github.com/aquasecurity/trivy/releases
-[release-img]: https://img.shields.io/github/release/aquasecurity/trivy.svg?logo=github
-[github-downloads-img]: https://img.shields.io/github/downloads/aquasecurity/trivy/total?logo=github
-[docker-pulls]: https://img.shields.io/docker/pulls/aquasec/trivy?logo=docker&label=docker%20pulls%20%2F%20trivy
-[license]: https://github.com/aquasecurity/trivy/blob/main/LICENSE
-[license-img]: https://img.shields.io/badge/License-Apache%202.0-blue.svg
-[homepage]: https://trivy.dev
-[docs]: https://trivy.dev/docs/latest/
-[pronunciation]: #how-to-pronounce-the-name-trivy
-[code-of-conduct]: https://github.com/aquasecurity/community/blob/main/CODE_OF_CONDUCT.md
+The readiness endpoint helps confirm whether the application is ready to receive requests.
 
-[Installation]:https://trivy.dev/docs/latest/getting-started/installation/
-[Ecosystem]: https://trivy.dev/docs/latest/ecosystem/
-[Scanning Coverage]: https://trivy.dev/docs/latest/coverage/
+Example commands:
 
-[alpine]: https://ariadne.space/2021/06/08/the-vulnerability-remediation-lifecycle-of-alpine-containers/
-[rego]: https://www.openpolicyagent.org/docs/latest/#rego
-[sigstore]: https://www.sigstore.dev/
+curl http://localhost:3000/health
 
-[aquasec]: https://aquasec.com
-[oss]: https://www.aquasec.com/products/open-source-projects/
-[discussions]: https://github.com/aquasecurity/trivy/discussions
+curl http://localhost:3000/ready
+
+Use the actual application port configured in your project.
+
+Health check screenshot
+
+"Health Checks" (evidence/health_checks.png)
+
+Testing
+
+Automated tests help confirm that the application works as expected.
+
+The project uses automated checks to identify problems before deployment.
+
+Examples include:
+
+1. Application tests.
+2. Docker build checks.
+3. Dependency security checks.
+4. Docker image scanning with Trivy.
+5. Code and configuration checks.
+6. A test that intentionally fails to demonstrate that the pipeline blocks an unsuccessful build or deployment.
+
+Test results screenshot
+
+"Test Results" (evidence/test_results.png)
+
+Continuous Integration
+
+GitHub Actions is used to automate the project checks whenever code is pushed to the repository or a pull request is created.
+
+The workflow checks the code, runs tests, builds the Docker image and performs security scanning.
+
+A failed check should prevent the deployment process from continuing.
+
+Successful GitHub Actions run
+
+"Successful CI Run" (evidence/ci_success.png)
+
+Failed GitHub Actions run
+
+"Failed CI Run" (evidence/ci_failure.png)
+
+Security
+
+Security is an important part of this project.
+
+The following practices are used:
+
+1. Environment variables are used for sensitive configuration.
+2. Passwords and secrets are not stored in the source code.
+3. Docker images are scanned with Trivy.
+4. Dependencies are checked for known vulnerabilities.
+5. The application container is configured to run without root privileges where supported.
+
+Trivy security scan screenshot
+
+"Trivy Security Scan" (evidence/trivy_scan.png)
+
+Deployment and Rollback
+
+The project includes scripts for deployment and rollback.
+
+Deployment is used to release an application version.
+
+Rollback is used to return to a previous working version if a release causes problems.
+
+The scripts should be run from the project directory.
+
+./scripts/deploy.sh
+
+./scripts/rollback.sh
+
+Deployment screenshot
+
+"Deployment" (evidence/deployment.png)
+
+Rollback screenshot
+
+"Rollback" (evidence/rollback.png)
+
+Monitoring and Logs
+
+Application logs help identify errors and understand what happens when the application is running.
+
+Health checks help confirm application availability.
+
+The project also includes a metrics endpoint where configured.
+
+Example:
+
+curl http://localhost:3000/metrics
+
+Application logs screenshot
+
+"Application Logs" (evidence/application_logs.png)
+
+Metrics screenshot
+
+"Application Metrics" (evidence/metrics.png)
+
+Documentation
+
+Additional project information is available in the "docs" folder.
+
+File| Description
+architecture.md| Explains the project architecture
+security.md| Describes security practices
+observability.md| Explains logging and monitoring
+runbook.md| Provides operational instructions
+decision-memo.md| Explains important project decisions
+incident-report.md| Documents a failure investigation
+ai-disclosure.md| Explains how AI assistance was used
+
+Project Evidence
+
+Screenshots are stored in the "evidence" folder.
+
+They provide visual proof of the project setup, Docker containers, health checks, test results, security scans, deployment and rollback.
+
+Only screenshots from actual project runs should be included.
+
+Limitations and Future Improvements
+
+This project is a learning and assessment project.
+
+Future improvements could include:
+
+1. Hosting the application on a cloud platform.
+2. Adding more automated tests.
+3. Improving monitoring and alerting.
+4. Adding stronger access controls.
+5. Improving deployment automation.
+
+AI Assistance
+
+ChatGPT was used to support planning, troubleshooting, code explanations and documentation during this project.
+
+The implementation and test results should be reviewed and verified by the project owner.
+
+More details are available in "docs/ai-disclosure.md".
+
+Conclusion
+
+This project demonstrates the basic DevOps process of building an application, running it with Docker, automating checks, scanning for security issues and managing deployment.
+
+It also demonstrates the importance of documentation, monitoring and recovery when problems occur.

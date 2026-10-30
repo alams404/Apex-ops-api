@@ -1,63 +1,181 @@
-# Incident report: API not ready after database credentials changed
+Incident Report: API Not Ready After Database Credentials Changed
 
-> **Fill in the bracketed parts from YOUR run of `./scripts/demo-incident.sh`.**
-> The log is saved in `evidence/incident-db-credentials.log`. Do not submit this report with
-> placeholders left in, and do not claim anything your log does not show.
+Incident Summary
 
-| Field | Value |
-| --- | --- |
-| Date and time (UTC) | [from your log] |
-| Version running | [v1.0.0] |
-| Severity | SEV1 (the only instance cannot serve data requests) |
-| Environment | Local Docker Compose, synthetic data |
-| Fault injected | The app container was restarted with a wrong database password (`APP_DB_PASSWORD`), while the database kept its correct password |
+Field| Value
+Date| 2026-10-30
+Time (UTC)| Approximately 07:46
+Application| apex-ops-api
+Version| v1.0.0
+Severity| SEV1 (controlled local test)
+Environment| Local Docker Compose, synthetic data
+Database| PostgreSQL 16
+Incident Type| Database authentication failure
 
-## 1. Symptom
+1. Symptom
 
-`GET /items` and `GET /ready` stopped working for users. `GET /ready` returned **HTTP 503** with `{"status":"not_ready","db":"down"}`. Meanwhile `GET /health` still returned **HTTP 200**, so a simple "is the process running" check would have reported everything as fine.
+The API became unavailable for data requests after the application container was restarted with an incorrect database password.
 
-## 2. Detection
+- "GET /items" failed.
+- "GET /ready" returned HTTP 503.
+- The readiness response reported "{"status":"not_ready","db":"down"}".
+- "GET /health" continued returning HTTP 200.
 
-- Readiness check `/ready` returned 503 (visible in `deploy.sh` / `smoke.sh` output and in `curl -i`).
-- `db_up` gauge on `/metrics` reads `0` after the failed check. In production the "Database unreachable" alert (`db_up == 0` for 2 minutes) would have fired.
-- Error-level log lines appeared in `docker compose logs app`.
+This demonstrated that the application process was running but could not successfully communicate with the database.
 
-Why liveness and readiness are separate: `/health` answers "should the container be restarted?" and `/ready` answers "should it receive traffic?". Restarting this container would not have fixed the problem, so keeping them separate avoids useless restart loops.
+2. Detection
 
-## 3. Investigation (timeline)
+The incident was detected through the application's readiness checks and structured application logs.
 
-| Step | Command | What it showed |
-| --- | --- | --- |
-| 1 | `curl -i localhost:3000/ready` | 503, `db: down` |
-| 2 | `curl -i localhost:3000/health` | 200, process alive |
-| 3 | `docker compose ps` | `db` container is **healthy**, so the database itself is up |
-| 4 | `docker compose logs --tail=20 app` | JSON lines with `"event":"db_check_failed"` and the error text `password authentication failed for user "apex"` |
-| 5 | Compare the app's connection settings with `.env` | The password in the app's `DATABASE_URL` did not match the database's password |
+The following indicators confirmed the failure:
 
-Reasoning: the database is healthy and reachable (otherwise the error would be `ECONNREFUSED` or `ENOTFOUND`), and PostgreSQL explicitly rejected the credentials. So the fault is in the app's configuration, not the network or the database.
+- The "/ready" endpoint returned HTTP 503.
+- The database availability metric ("db_up") reported 0.
+- Application logs recorded the "db_check_failed" event.
+- PostgreSQL authentication errors reported: "password authentication failed for user "apex"".
 
-## 4. Root cause
+The separate health and readiness endpoints helped distinguish application process health from database availability.
 
-The application was started with a database password that did not match the one PostgreSQL was initialised with. (In the demo this is injected on purpose. In real life the common triggers are a rotated password updated in only one place, or a typo in a configuration change.)
+"/health" checks whether the application process is alive, while "/ready" checks whether the application can receive traffic.
 
-## 5. Fix
+3. Investigation and Timeline
 
-Redeployed the app with the correct credentials from `.env`:
+Step| Investigation| Result
+1| "curl -i localhost:3000/ready"| HTTP 503, database down
+2| "curl -i localhost:3000/health"| HTTP 200, process alive
+3| "docker compose ps"| Database container healthy
+4| "docker compose logs --tail=20 app"| Authentication failure found in application logs
+5| Compared application database credentials with ".env"| Password mismatch identified
+6| Restored correct application credentials and restarted app| Application became ready again
 
-```bash
-docker compose up -d app
-```
+Investigation Findings
 
-Verified: `/ready` returned 200 and `/version` reported the expected version. No data was lost because the database was never changed.
+The PostgreSQL container was healthy and running.
 
-## 6. Impact
+The application logs showed repeated database authentication failures for user "apex".
 
-[State the real duration from your log timestamps.] Data requests failed for that period. No data was lost or corrupted.
+This confirmed that the problem was not caused by a database container failure or network connectivity issue.
 
-## 7. Prevention and follow-up
+The application was using incorrect database credentials.
 
-1. **Alerting:** implement the `db_up == 0 for 2m` alert so a human is told within minutes, not when a user complains (see `docs/observability.md`).
-2. **Single source of truth for secrets:** both containers read the password from the same `.env` file, and in the cloud from Key Vault, so they cannot drift apart.
-3. **Pre-deploy check:** `deploy.sh` already waits for `/ready` before declaring success, so a bad credential change is caught at deploy time. Add a CI smoke test that starts the stack with the generated `.env` (the `deploy` job does this).
-4. **Rotation procedure:** document how to rotate the password safely (change the database user's password first, then update the secret, then restart the app).
-5. **Good logging:** the cause was found within one command because the error is logged with an `event` name and the real reason, while the HTTP response gives callers no internal details.
+4. Root Cause
+
+The root cause was a mismatch between the database password configured for the application and the password configured for PostgreSQL.
+
+During the controlled fault-injection test, the application container was restarted with an incorrect database password while the database retained its correct password.
+
+PostgreSQL rejected the authentication attempts.
+
+As a result, the application could not establish a database connection and failed its readiness checks.
+
+5. Resolution and Recovery
+
+The issue was resolved by restoring the correct database password from the local ".env" configuration.
+
+The following recovery steps were performed:
+
+1. Identified the authentication failure from the application logs.
+2. Confirmed that the PostgreSQL container was healthy.
+3. Restored the correct database credentials.
+4. Recreated the application container.
+5. Waited for the database health check to pass.
+6. Waited for the application readiness check to succeed.
+7. Verified the API using the "/ready" endpoint.
+
+Recovery Verification
+
+The application logs confirmed:
+
+- Database container running and healthy.
+- Application container recreated and started.
+- Application reported "READY".
+- "GET /ready" returned HTTP 200.
+
+The application successfully recovered after the correct credentials were restored.
+
+6. Impact
+
+This was a controlled fault-injection exercise using synthetic data in a local Docker Compose environment.
+
+The observed interval between the first logged authentication failure at approximately 07:46:19 UTC and successful application readiness at approximately 07:46:40 UTC was about 20 seconds.
+
+During this period:
+
+- API data requests were unavailable.
+- The readiness endpoint returned HTTP 503.
+- The application process remained alive.
+- The database container remained healthy.
+
+No data was lost or corrupted because the database itself was not modified during the test.
+
+No production users or production data were affected.
+
+7. Prevention and Follow-up Actions
+
+The following improvements are recommended to reduce the risk of similar incidents.
+
+1. Monitoring and Alerting
+
+Implement an alert when the "db_up" metric remains at 0 for two consecutive minutes.
+
+This will help identify database connectivity problems before users report them.
+
+2. Centralized Secret Management
+
+Ensure the application and database use consistent database credentials.
+
+For cloud deployments, store sensitive credentials in a secure secret manager such as Azure Key Vault or an equivalent service.
+
+Never commit real passwords or ".env" files to GitHub.
+
+3. Pre-deployment Validation
+
+Keep the readiness check in the deployment process.
+
+The deployment script should only report success after the "/ready" endpoint returns HTTP 200.
+
+Add a CI smoke test to validate database connectivity before declaring a deployment successful.
+
+4. Secure Password Rotation
+
+Document a safe database password rotation procedure.
+
+Update the database credentials and application configuration in a coordinated manner, then restart the application and verify readiness.
+
+5. Structured Logging
+
+Continue using structured JSON application logs with meaningful event names.
+
+The "db_check_failed" event helped identify the root cause quickly without exposing internal database credentials in the HTTP response.
+
+8. Lessons Learned
+
+This incident demonstrated several important DevOps practices:
+
+- A running container does not necessarily mean an application is ready.
+- Health checks and readiness checks serve different purposes.
+- Database health and application database connectivity must be monitored separately.
+- Structured logs make troubleshooting faster.
+- Secrets must be managed consistently across application and database services.
+- Deployment pipelines should verify application readiness before declaring success.
+
+9. Evidence
+
+The following evidence supports this incident report:
+
+- "evidence/incident-db-credentials.log"
+- "scripts/demo-incident.sh"
+- Docker Compose container health status.
+- Application structured logs.
+- HTTP 503 readiness failure.
+- HTTP 200 recovery verification.
+
+10. Final Status
+
+Incident Status: RESOLVED
+
+The controlled database authentication failure was successfully reproduced, detected, investigated and resolved.
+
+The application returned to a healthy and ready state after the correct database credentials were restored.
+
+The exercise demonstrated database failure detection, structured logging, container recovery, readiness validation and incident documentation.
