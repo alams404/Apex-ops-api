@@ -1,0 +1,226 @@
+name: CI/CD
+
+# Pipeline order (each arrow is a "needs:" dependency, so a failure stops everything after it):
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      force_fail:
+        description: "Make the intentional-failure test fail (demo)"
+        type: boolean
+        default: false
+
+# Least privilege: the token can only read the repo unless a job asks for more.
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+  # The intentional failure switch. True on the demo-failure branch or when ticked manually.
+  FORCE_FAIL: ${{ github.ref_name == 'demo-failure' || inputs.force_fail == true }}
+
+jobs:
+  lint:
+    name: Lint (code, Dockerfile, scripts, compose)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: app
+
+      - name: ESLint
+        run: npm run lint
+        working-directory: app
+
+      - name: Hadolint (Dockerfile)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+          failure-threshold: warning
+
+      - name: ShellCheck (scripts)
+        run: shellcheck -x -S warning scripts/*.sh
+
+      - name: Validate docker-compose.yml
+        env:
+          POSTGRES_PASSWORD: ci-only-not-a-real-secret
+        run: docker compose --env-file .env.example config --quiet
+
+      - name: Make sure no .env file is committed
+        run: |
+          if git ls-files | grep -E '(^|/)\.env$'; then
+            echo "A .env file is committed. Remove it and rotate any secret in it."; exit 1
+          fi
+
+  test:
+    name: Test (unit + PostgreSQL integration)
+    runs-on: ubuntu-latest
+    needs: lint
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci-only-not-a-real-secret
+          POSTGRES_DB: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d ci"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: app
+
+      - name: Run tests
+        run: npm test
+        working-directory: app
+        env:
+          DATABASE_URL: postgres://ci:ci-only-not-a-real-secret@localhost:5432/ci
+
+  audit:
+    name: Dependency audit (npm audit)
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # Production dependencies only. Fails on HIGH or CRITICAL findings.
+      - name: npm audit
+        run: npm audit --omit=dev --audit-level=high
+        working-directory: app
+
+  build:
+    name: Build, scan and publish image
+    runs-on: ubuntu-latest
+    needs: [test, audit]
+    permissions:
+      contents: read
+      packages: write # needed only to push to GitHub Container Registry
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute image name and version
+        id: meta
+        run: |
+          OWNER="${GITHUB_REPOSITORY_OWNER,,}"            # GHCR requires lowercase
+          SHORT_SHA="${GITHUB_SHA::7}"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME}"                  # release tag, for example v1.2.0
+          else
+            VERSION="sha-${SHORT_SHA}"                    # every other build: immutable git sha
+          fi
+          echo "image=ghcr.io/${OWNER}/apex-ops-api" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Build image
+        run: |
+          docker build \
+            --build-arg APP_VERSION="${{ steps.meta.outputs.version }}" \
+            --build-arg GIT_SHA="${{ steps.meta.outputs.short_sha }}" \
+            -t "${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}" .
+
+      - name: Check the container runs as non-root
+        run: |
+          USER_ID="$(docker run --rm --entrypoint id "${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}" -u)"
+          echo "Container user id: ${USER_ID}"
+          test "${USER_ID}" != "0"
+
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true # only fail on problems that have a fix available
+          exit-code: "1"
+
+      # Images are pushed ONLY from main or a version tag, never from feature branches.
+      - name: Log in to GHCR
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push image
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+        run: docker push "${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}"
+
+  deploy:
+    name: Deploy (Docker Compose on the runner) + smoke test
+    runs-on: ubuntu-latest
+    needs: build
+    # Deployment happens only for main and release tags, and only if every job above passed.
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create .env (random password, never stored)
+        run: ./scripts/init-env.sh
+
+      - name: Deploy the image that was just built
+        env:
+          IMAGE: ${{ needs.build.outputs.image }}
+        run: |
+          # deploy.sh reads IMAGE from .env, so write the registry image name into it.
+          sed -i "s|^IMAGE=.*|IMAGE=${IMAGE}|" .env
+          ./scripts/deploy.sh "${{ needs.build.outputs.version }}"
+
+      - name: Smoke test
+        run: ./scripts/smoke.sh "${{ needs.build.outputs.version }}"
+
+      - name: Collect evidence (logs)
+        if: always()
+        run: |
+          mkdir -p evidence-ci
+          docker compose ps > evidence-ci/compose-ps.txt 2>&1 || true
+          docker compose logs --no-color > evidence-ci/compose-logs.txt 2>&1 || true
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-evidence
+          path: evidence-ci/

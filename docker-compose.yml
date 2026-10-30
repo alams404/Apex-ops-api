@@ -1,0 +1,56 @@
+# Local deployment: API + PostgreSQL.
+# All configuration comes from .env (see .env.example). Nothing secret is written here.
+name: apex-ops
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    # Values are read from .env (Compose loads it automatically). Only the database
+    # container receives the password; the app gets a ready-made connection string.
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-apex}
+      POSTGRES_DB: ${POSTGRES_DB:-apex_ops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is not set. Run ./scripts/init-env.sh}
+    volumes:
+      - pgdata:/var/lib/postgresql/data # persistent storage: data survives restarts and rollbacks
+    # No "ports:" on purpose: the database is reachable only from the app, not from the host.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    security_opt:
+      - no-new-privileges:true
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # Versioned image: the tag is chosen by deploy.sh / rollback.sh. Never "latest".
+    image: ${IMAGE:-apex-ops-api}:${APP_VERSION:?APP_VERSION is not set}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy # wait until PostgreSQL accepts connections
+    ports:
+      - "127.0.0.1:${APP_PORT:-3000}:3000" # reachable from this machine only
+    environment:
+      PORT: "3000"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # APP_DB_PASSWORD exists only so the incident demo can break the app's credentials
+      # without touching the database. Normally it falls back to POSTGRES_PASSWORD.
+      DATABASE_URL: postgres://${POSTGRES_USER:-apex}:${APP_DB_PASSWORD:-${POSTGRES_PASSWORD}}@db:5432/${POSTGRES_DB:-apex_ops}
+    # Least privilege hardening
+    read_only: true # root filesystem is read-only
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+    pids_limit: 100
+
+volumes:
+  pgdata:
