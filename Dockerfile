@@ -7,11 +7,14 @@
 # NOTE: "node:22-alpine" follows the latest 22.x patch release. Before you submit, pin it
 # to an exact digest (see README, section "Pin the base image") for fully reproducible builds.
 FROM node:22-alpine AS deps
+RUN npm install -g npm@11.21.1
 WORKDIR /app
 COPY app/package.json app/package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
 
-FROM node:22-alpine AS runtime
+FROM node:22-alpine AS runtine
+RUN npm install -g npm@11.21.1
+
 
 # Build metadata. These end up in the image so /version can report what is running.
 ARG APP_VERSION=dev

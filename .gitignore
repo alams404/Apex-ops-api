@@ -15,3 +15,7 @@ coverage/
 .DS_Store
 .vscode/
 .idea/
+trivy.exe
+.msi
+*.msi
+trivy.exe
