@@ -18,6 +18,9 @@ The endpoints are:
 
 Logs are written as one JSON object per line, and every request gets an id that also comes back in the `x-request-id` response header, so I can follow a single request through the logs.
 
+<img width="1324" height="761" alt="apex-ops-api-architecture drawio" src="https://github.com/user-attachments/assets/2aab344d-68a8-4ec7-b020-3ca1abb70c65" />
+
+
 ## How to run it
 
 I ran everything on a Windows 10 laptop with Docker Desktop and Git Bash. It should work the same on Linux or macOS.
@@ -107,10 +110,10 @@ To show that CI really blocks a bad change, I pushed a branch called `demo-failu
 
 <img width="1105" height="600" alt="PACKAGE 2" src="https://github.com/user-attachments/assets/b230e80b-3aa5-49d6-8094-a19f8ffc67a3" />
 
+<img width="1325" height="606" alt="TRIEVY1" src="https://github.com/user-attachments/assets/242df3f3-0994-4cbb-9171-ec9444f26429" />
 
+<img width="977" height="641" alt="TRIEVE 2" src="https://github.com/user-attachments/assets/4f8188a3-ae70-4c31-88e8-24016c6768a9" /><img width="396" height="248" alt="smoke text" src="https://github.com/user-attachments/assets/93ed470c-6f86-4177-b6ae-745bd6d46aa9" />
 
-![Scan results](evidence/screenshots/12_scans.png)
-*Trivy and npm audit results from the pipeline.*
 
 ### Things that broke along the way
 
@@ -120,8 +123,8 @@ The first run failed in the build job because the Trivy action version I had pin
 
 Locally, my first smoke test failed because `/version` reported `dev` instead of `v1.0.0`. I had started the stack with a plain `docker compose up --build`, which builds without the version argument. The smoke test caught it, and rebuilding through `deploy.sh` fixed it. That is exactly the kind of mistake the version check is there for.
 
-![Smoke test catching a wrong version](evidence/screenshots/04_smoke_test_caught_version.png)
-*The smoke test failing because the image was built without its version.*
+<img width="492" height="216" alt="SMOK" src="https://github.com/user-attachments/assets/5d78dcc5-55ab-4c62-aaba-d47915406ac4" />
+
 
 ## Release and rollback
 
@@ -142,8 +145,8 @@ To demonstrate the whole thing in one go, `demo-release.sh` deploys v1.0.0, crea
 ./scripts/demo-release.sh 2>&1 | tee evidence/release-rollback-demo.log
 ```
 
-![Release and rollback demo](evidence/screenshots/10_release_rollback.png)
-*The rollback succeeding, the smoke test passing on v1.0.0, and the item created earlier still in the list. The full output is saved in `evidence/release-rollback-demo.log`.*
+<img width="703" height="634" alt="ROLLBACK" src="https://github.com/user-attachments/assets/df1563b7-09d8-4f64-a544-9b7ae5207cb3" />
+
 
 ## Observability and the failure I investigated
 
@@ -155,8 +158,8 @@ For the failure investigation I started the app with a wrong database password w
 ./scripts/demo-incident.sh 2>&1 | tee evidence/incident-db-credentials.log
 ```
 
-![Failure investigation](evidence/screenshots/11_incident.png)
-*Health returning 200 while ready returns 503, the log lines that gave the cause, and the recovery.*
+<img width="717" height="650" alt="EVIDENC" src="https://github.com/user-attachments/assets/c8a14415-d641-4c9b-bfb6-a25964f08904" />
+
 
 The full write up is in `docs/incident-report.md`.
 
